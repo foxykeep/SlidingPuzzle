@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="hello">Hello World, HomeActivity!</string>
-    <string name="app_name">FBPuzzlee</string>
+    <string name="app_name">FBPuzzle</string>
 
 </resources>
