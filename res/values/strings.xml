@@ -2,5 +2,7 @@
 <resources>
 
     <string name="app_name">FBPuzzle</string>
+    <string name="home_b_reset">Reset</string>
+    <string name="home_b_scramble">Scramble</string>
 
 </resources>
