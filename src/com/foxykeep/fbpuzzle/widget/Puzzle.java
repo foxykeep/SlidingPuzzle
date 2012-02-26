@@ -72,6 +72,8 @@ public class Puzzle extends View {
     private Tile mStartingTile;
     private int mStartingPointerId = INVALID_ID;
     private boolean mIsATap;
+    private boolean mIsOvershooting;
+    private boolean mIsOvershootingEndMovement;
 
     private boolean mHasMovementStarted = false;
     private boolean mFinishCurrentMovement = false;
@@ -526,6 +528,7 @@ public class Puzzle extends View {
                 mStartingX = x;
                 mStartingY = y;
                 mIsATap = true;
+                mIsOvershooting = false;
                 computeStartingPosition();
 
                 invalidate();
@@ -561,21 +564,29 @@ public class Puzzle extends View {
                     break;
                 }
 
-                // Let's look for a fling gesture
-                final VelocityTracker velocityTracker = mVelocityTracker;
-                velocityTracker.computeCurrentVelocity(VELOCITY_UNITS, mMaxFlingVelocity);
+                if (mIsOvershooting) {
+                    mFinishCurrentMovement = mIsOvershootingEndMovement;
+                } else {
+                    // Let's look for a fling gesture
+                    final VelocityTracker velocityTracker = mVelocityTracker;
+                    velocityTracker.computeCurrentVelocity(VELOCITY_UNITS, mMaxFlingVelocity);
 
-                if (mMovementDirection == DIRECTION_LEFT || mMovementDirection == DIRECTION_RIGHT) {
-                    if (Math.abs(mStartingX - x) > mTileSlop) {
-                        mFinishCurrentMovement = true;
-                    } else if (Math.abs((int) mVelocityTracker.getXVelocity(id)) > mMinFlingVelocity) {
-                        mFinishCurrentMovement = true;
-                    }
-                } else if (mMovementDirection == DIRECTION_UP || mMovementDirection == DIRECTION_DOWN) {
-                    if (Math.abs(mStartingY - y) > mTileSlop) {
-                        mFinishCurrentMovement = true;
-                    } else if (Math.abs((int) mVelocityTracker.getYVelocity(id)) > mMinFlingVelocity) {
-                        mFinishCurrentMovement = true;
+                    if (mMovementDirection == DIRECTION_LEFT || mMovementDirection == DIRECTION_RIGHT) {
+                        if (Math.abs(mStartingX - x) > mTileSlop) {
+                            mFinishCurrentMovement = true;
+                        } else if (Math.abs((int) velocityTracker.getXVelocity(id)) > mMinFlingVelocity) {
+                            mFinishCurrentMovement = true;
+                        } else {
+                            mFinishCurrentMovement = false;
+                        }
+                    } else if (mMovementDirection == DIRECTION_UP || mMovementDirection == DIRECTION_DOWN) {
+                        if (Math.abs(mStartingY - y) > mTileSlop) {
+                            mFinishCurrentMovement = true;
+                        } else if (Math.abs((int) velocityTracker.getYVelocity(id)) > mMinFlingVelocity) {
+                            mFinishCurrentMovement = true;
+                        } else {
+                            mFinishCurrentMovement = false;
+                        }
                     }
                 }
 
@@ -621,8 +632,8 @@ public class Puzzle extends View {
 
         final Tile startingTile = mStartingTile;
         final ArrayList<Tile> otherMovingTileList = mOtherMovingTileList;
-        final int moveX = mStartingX - x;
-        final int moveY = mStartingY - y;
+        int moveX = mStartingX - x;
+        int moveY = mStartingY - y;
 
         if (!mHasMovementStarted) {
             // We are not already in a movement
@@ -647,11 +658,30 @@ public class Puzzle extends View {
         }
 
         if (mMovementDirection == DIRECTION_LEFT || mMovementDirection == DIRECTION_RIGHT) {
-            if (Math.abs(moveX) > mTileWidth || (moveX < 0 && mMovementDirection == DIRECTION_LEFT)
-                    || (moveX > 0 && mMovementDirection == DIRECTION_RIGHT)) {
-                // Overshooting
-                return;
+            if (Math.abs(moveX) > mTileWidth) {
+                if (!mIsOvershooting) {
+                    // First overshooting
+                    moveX = moveX > 0 ? mTileWidth : -mTileWidth;
+                    mIsOvershooting = true;
+                    mIsOvershootingEndMovement = true;
+                } else {
+                    // Overshooting
+                    return;
+                }
+            } else if ((moveX < 0 && mMovementDirection == DIRECTION_LEFT) || (moveX > 0 && mMovementDirection == DIRECTION_RIGHT)) {
+                if (!mIsOvershooting) {
+                    // First overshooting
+                    moveX = 0;
+                    mIsOvershooting = true;
+                    mIsOvershootingEndMovement = false;
+                } else {
+                    // Subsequent overshooting
+                    return;
+                }
+            } else {
+                mIsOvershooting = false;
             }
+
             mStartingTile.anchorX = mStartingTile.startAnchorX - moveX;
             if (otherMovingTileList.size() > 0) {
                 for (Tile tile : otherMovingTileList) {
@@ -659,11 +689,30 @@ public class Puzzle extends View {
                 }
             }
         } else if (mMovementDirection == DIRECTION_UP || mMovementDirection == DIRECTION_DOWN) {
-            if (Math.abs(moveY) > mTileWidth || (moveY < 0 && mMovementDirection == DIRECTION_UP)
-                    || (moveY > 0 && mMovementDirection == DIRECTION_DOWN)) {
-                // Overshooting
-                return;
+            if (Math.abs(moveY) > mTileWidth) {
+                if (!mIsOvershooting) {
+                    // First overshooting
+                    moveY = moveY > 0 ? mTileWidth : -mTileWidth;
+                    mIsOvershooting = true;
+                    mIsOvershootingEndMovement = true;
+                } else {
+                    // Overshooting
+                    return;
+                }
+            } else if ((moveY < 0 && mMovementDirection == DIRECTION_UP) || (moveY > 0 && mMovementDirection == DIRECTION_DOWN)) {
+                if (!mIsOvershooting) {
+                    // First overshooting
+                    moveY = 0;
+                    mIsOvershooting = true;
+                    mIsOvershootingEndMovement = false;
+                } else {
+                    // Subsequent overshooting
+                    return;
+                }
+            } else {
+                mIsOvershooting = false;
             }
+
             mStartingTile.anchorY = mStartingTile.startAnchorY - moveY;
             if (otherMovingTileList.size() > 0) {
                 for (Tile tile : otherMovingTileList) {
