@@ -1,17 +1,23 @@
 package com.foxykeep.fbpuzzle.widget;
 
 import java.util.ArrayList;
+import java.util.Random;
 
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.SparseArray;
+import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.animation.DecelerateInterpolator;
+import android.widget.Scroller;
 
 import com.foxykeep.fbpuzzle.config.LogConfig;
 
@@ -19,42 +25,104 @@ public class Puzzle extends View {
 
     private static final String LOG_TAG = Puzzle.class.getSimpleName();
 
-    private static final int NB_PUZZLE_TILES = 15;
+    private static final int NB_PUZZLE_TILES = 16;
+    private static final int NB_PUZZLE_DRAWABLES = 15;
     private static final int NB_COLS = 4;
     private static final int NB_ROWS = 4;
 
-    private static final int LAST_TILE_INDEX = 15;
+    private static final int TILE_PADDING_UNSCALED = 2;
 
-    private static final int INVALID_POS = -1;
+    private static final int ID_EMPTY_TILE = 15;
+
+    private static final int INVALID_STATE = -1;
 
     private static final int DIRECTION_LEFT = 0;
     private static final int DIRECTION_RIGHT = 1;
     private static final int DIRECTION_UP = 2;
     private static final int DIRECTION_DOWN = 3;
 
+    private static final int VELOCITY_UNITS = 1000;
+    private static final int FRAME_RATE = 1000 / 60;
+
+    private static final int INVALID_ID = -1;
+
     // Variables set by the user
     private int mBackgroundColor;
+    private int mEmptyTileColor;
     private Drawable[] mDrawableArray;
 
     // Other variables
-    private final Paint mPaint = new Paint();
+    private final Paint mEmptyTilePaint = new Paint();
 
     private int mTileWidth;
+    private int mTilePadding;
     private int mWorkingAreaMinX;
-    private int mWorkingAreaMaxX;
     private int mWorkingAreaMinY;
+    private int mWorkingAreaSize;
 
     private final Tile[][] mTileArray = new Tile[4][4];
     private final SparseArray<Tile> mTileSparseArray = new SparseArray<Puzzle.Tile>();
 
-    private final ViewConfiguration mViewConfiguration;
+    private VelocityTracker mVelocityTracker;
+    private ViewConfiguration mViewConfiguration;
+    private Scroller mScroller;
+    private boolean mIsScrolling = false;
+    private int mStartingX;
+    private int mStartingY;
+    private Tile mStartingTile;
+    private int mStartingPointerId = INVALID_ID;
+    private boolean mIsATap;
+
+    private boolean mHasMovementStarted = false;
+    private boolean mFinishCurrentMovement = false;
+    private int mMovementDirection = INVALID_STATE;
+    private ArrayList<Tile> mOtherMovingTileList = new ArrayList<Tile>();
+
+    private int mMinFlingVelocity;
+    private int mMaxFlingVelocity;
+    private int mTileSlop;
+
+    private Random mRandom = new Random();
 
     private boolean mNoInvalidate;
 
     /**
      * Indicates whether or not onSizeChanged has been done.
      */
-    protected boolean mLayoutDone = false;
+    private boolean mLayoutDone = false;
+
+    private Runnable mScrollerRunnable = new Runnable() {
+        @Override
+        public void run() {
+            final Scroller scroller = mScroller;
+            if (!scroller.isFinished()) {
+                scroller.computeScrollOffset();
+
+                int dx = scroller.getCurrX() - mStartingTile.anchorX;
+                int dy = scroller.getCurrY() - mStartingTile.anchorY;
+
+                mStartingTile.anchorX += dx;
+                mStartingTile.anchorY += dy;
+
+                if (mOtherMovingTileList.size() > 0) {
+                    for (Tile tile : mOtherMovingTileList) {
+                        tile.anchorX += dx;
+                        tile.anchorY += dy;
+                    }
+                }
+
+                postDelayed(this, FRAME_RATE);
+                invalidate();
+            } else {
+                mIsScrolling = false;
+                computeTilesNewCoordinates();
+                computeTilesStartPosition();
+                computeMovability();
+
+                stopAnimations();
+            }
+        }
+    };
 
     public Puzzle(final Context context) {
         this(context, null);
@@ -67,8 +135,6 @@ public class Puzzle extends View {
     public Puzzle(final Context context, final AttributeSet attrs, final int defStyle) {
         super(context, attrs, defStyle);
 
-        mViewConfiguration = ViewConfiguration.get(context);
-
         initPuzzle();
     }
 
@@ -76,6 +142,8 @@ public class Puzzle extends View {
      * Initialize the {@link Puzzle} with default values.
      */
     private void initPuzzle() {
+
+        final Context context = getContext();
 
         setFocusable(true);
         setFocusableInTouchMode(true);
@@ -85,26 +153,24 @@ public class Puzzle extends View {
         mNoInvalidate = true;
 
         // General default properties
-        setBackgroundColor(Color.DKGRAY);
+        setBackgroundColor(Color.TRANSPARENT);
+        setEmptyTileColor(Color.DKGRAY);
+
+        final float scale = getResources().getDisplayMetrics().density;
+        mTilePadding = (int) (TILE_PADDING_UNSCALED * scale);
+
+        mViewConfiguration = ViewConfiguration.get(context);
+        mScroller = new Scroller(context, new DecelerateInterpolator());
+
+        // Get the velocity
+        mMinFlingVelocity = mViewConfiguration.getScaledMinimumFlingVelocity();
+        mMaxFlingVelocity = mViewConfiguration.getScaledMaximumFlingVelocity();
 
         // Create the tiles
-        for (int i = 0; i < NB_COLS; i++) {
-            for (int j = 0; j < NB_ROWS; j++) {
-
-                Tile tile = null;
-
-                final int index = i + j * NB_COLS;
-                if (index != LAST_TILE_INDEX) {
-                    tile = new Tile(index);
-                    tile.row = i;
-                    tile.column = j;
-
-                    mTileSparseArray.put(index, tile);
-                }
-
-                mTileArray[i][j] = tile;
-            }
+        for (int i = 0; i < NB_PUZZLE_TILES; i++) {
+            mTileSparseArray.put(i, new Tile(i, i == ID_EMPTY_TILE));
         }
+        resetPuzzle();
 
         mNoInvalidate = tmpNoInvalidate;
     }
@@ -140,6 +206,31 @@ public class Puzzle extends View {
     }
 
     /**
+     * Defines the color of the empty tile.
+     * 
+     * @param color The color to set as the empty tile
+     * @throw {@link IllegalStateException} When trying to change the value of this property when the component is already displayed on screen
+     */
+    public void setEmptyTileColor(final int color) {
+        if (mLayoutDone) {
+            throw new IllegalStateException("The background color cannot be changed once the component has been displayed");
+        }
+        if (color != mEmptyTileColor) {
+            mEmptyTilePaint.setColor(color);
+        }
+        mEmptyTileColor = color;
+    }
+
+    /**
+     * Returns the color of the empty tile.
+     * 
+     * @return An integer representing the color of the empty tile.
+     */
+    public int getEmptyTileColor() {
+        return mEmptyTileColor;
+    }
+
+    /**
      * Set the list of {@link Drawable}s for the puzzle. It should be a list of 15 {@link Drawable}s.
      * <p>
      * If there are more, we will take only the first 15. If there are less, we will loop until we have 15.
@@ -151,70 +242,108 @@ public class Puzzle extends View {
         int nbDrawableSet = 0;
 
         do {
-            for (int i = 0; i < drawableListSize && i < NB_PUZZLE_TILES; i++) {
+            for (int i = 0; i < drawableListSize && i < NB_PUZZLE_DRAWABLES; i++) {
                 if (mDrawableArray == null) {
-                    mDrawableArray = new Drawable[15];
+                    mDrawableArray = new Drawable[16];
                 }
                 mDrawableArray[nbDrawableSet++] = drawableList.get(i);
+                if (nbDrawableSet == ID_EMPTY_TILE) {
+                    nbDrawableSet++;
+                }
             }
-        } while (nbDrawableSet < NB_PUZZLE_TILES);
+        } while (nbDrawableSet < NB_PUZZLE_DRAWABLES);
+        // Empty tile for the hole in the puzzle
+        mDrawableArray[ID_EMPTY_TILE] = null;
 
-        resetPuzzle();
-    }
-
-    /**
-     * Give an array of {@link Drawable}s for the images of the puzzle. Must have exactly 15 things or an {@link IllegalArgumentException} will be
-     * thrown
-     * 
-     * @param drawableArray an array of {@link Drawable}s for the images of the puzzle
-     */
-    public void setDrawableArray(final Drawable[] drawableArray) {
-        if (drawableArray == null || drawableArray.length != 15) {
-            throw new IllegalArgumentException("The given drawableArray must be not null and exactly 15 Drawables long");
+        for (int i = 0, j = 0; i < NB_PUZZLE_TILES; i++) {
+            Tile tile = mTileSparseArray.get(i);
+            if (!tile.isEmptyTile) {
+                tile.drawable = mDrawableArray[j++];
+            }
         }
 
-        mDrawableArray = drawableArray;
-
-        resetPuzzle();
+        invalidate();
     }
 
     /**
      * Reset the puzzle to the correct order
      */
     public void resetPuzzle() {
-        for (int i = 0; i < NB_COLS; i++) {
-            for (int j = 0; j < NB_ROWS; j++) {
-
-                final Tile tile;
-
-                final int index = i + j * NB_COLS;
-                if (index != LAST_TILE_INDEX) {
-                    tile = mTileSparseArray.get(index);
-                    tile.drawable = mDrawableArray[index];
-                    tile.row = i;
-                    tile.column = j;
-                } else {
-                    tile = null;
-                }
-                mTileArray[i][j] = tile;
-            }
+        for (int i = 0; i < NB_PUZZLE_TILES; i++) {
+            final Tile tile = mTileSparseArray.get(i);
+            tile.column = i % 4;
+            tile.row = i / 4;
+            mTileArray[tile.column][tile.row] = tile;
         }
 
         computeMovability();
-        computeTileFixedPosition();
+        computeTilesStartPosition();
 
         invalidate();
     }
 
-    private void computeTileFixedPosition() {
+    public void scramblePuzzle() {
+        do {
+            scramble();
+        } while (!checkIfSolvable());
+
+        computeMovability();
+        computeTilesStartPosition();
+
+        invalidate();
+    }
+
+    private void scramble() {
+        int nbScrambles = 0;
+        while (nbScrambles < 25) {
+            final int i1 = mRandom.nextInt(NB_PUZZLE_TILES);
+            final int i2 = mRandom.nextInt(NB_PUZZLE_TILES);
+
+            if (i1 != i2) {
+                final Tile tile1 = mTileSparseArray.get(i1);
+                final Tile tile2 = mTileSparseArray.get(i2);
+                swapTiles(tile1, tile2);
+            }
+
+            nbScrambles++;
+        }
+    }
+
+    private boolean checkIfSolvable() {
+        // Tiles solvability algorithm based on http://www.cs.bham.ac.uk/~mdr/teaching/modules04/java2/TilesSolvability.html
+
+        int nbInvert = 0;
+        Tile emptyTile = null;
+        Tile[][] tileArray = mTileArray;
+
+        for (int j = 0; j < NB_ROWS; j++) {
+            for (int i = 0; i < NB_COLS; i++) {
+                final int id = tileArray[i][j].id;
+                if (id == ID_EMPTY_TILE) {
+                    emptyTile = tileArray[i][j];
+                } else {
+                    for (int n = i + j * 4; n < NB_PUZZLE_TILES; n++) {
+                        int nextId = tileArray[n % 4][n / 4].id;
+                        if (nextId < id) {
+                            nbInvert++;
+                        }
+                    }
+                }
+            }
+        }
+
+        return nbInvert % 2 == (emptyTile.row + 1) % 2;
+    }
+
+    private void computeTilesStartPosition() {
         for (int i = 0; i < NB_COLS; i++) {
             for (int j = 0; j < NB_ROWS; j++) {
                 final Tile tile = mTileArray[i][j];
                 if (tile == null) {
                     continue;
                 }
-                tile.anchorX = mWorkingAreaMinX + i * mTileWidth;
-                tile.anchorY = mWorkingAreaMinY + j * mTileWidth;
+                tile.anchorX = tile.startAnchorX = mWorkingAreaMinX + i * mTileWidth;
+                tile.anchorY = tile.startAnchorY = mWorkingAreaMinY + j * mTileWidth;
             }
         }
 
@@ -234,9 +363,9 @@ public class Puzzle extends View {
         }
 
         if (widthMode == MeasureSpec.UNSPECIFIED) {
-            widthSize = resolveSizeAndState(heightSize, widthMeasureSpec, 0);
+            widthSize = resolveSize(heightSize, widthMeasureSpec);
         } else if (heightMode == MeasureSpec.UNSPECIFIED) {
-            heightSize = resolveSizeAndState(widthSize, heightMeasureSpec, 0);
+            heightSize = resolveSize(widthSize, heightMeasureSpec);
         }
 
         setMeasuredDimension(widthSize, heightSize);
@@ -253,20 +382,21 @@ public class Puzzle extends View {
 
         computeWorkingArea(w, h);
         computeTileWidth();
-        computeTileFixedPosition();
+        computeTilesStartPosition();
     }
 
     private void computeWorkingArea(final int w, final int h) {
         final int workingAreaSize = Math.min(w, h) / 4 * 4; // We want a multiple of 4 for easy sizing
         mWorkingAreaMinX = (w - workingAreaSize) / 2;
-        mWorkingAreaMaxX = (w + workingAreaSize) / 2;
         mWorkingAreaMinY = (h - workingAreaSize) / 2;
+        mWorkingAreaSize = workingAreaSize;
 
-        Log.d(LOG_TAG, "mWorkingArea | x (min,max) : " + mWorkingAreaMinX + " " + mWorkingAreaMaxX + " | y min : " + mWorkingAreaMinY);
+        Log.d(LOG_TAG, "mWorkingArea | x min : " + mWorkingAreaMinX + " | y min : " + mWorkingAreaMinY);
     }
 
     private void computeTileWidth() {
-        mTileWidth = (mWorkingAreaMaxX - mWorkingAreaMinX) / 4;
+        mTileWidth = (mWorkingAreaSize - mTilePadding * 2) / 4;
+        mTileSlop = mTileWidth / 2;
 
         Log.d(LOG_TAG, "mTileWidth : " + mTileWidth);
     }
@@ -281,90 +411,480 @@ public class Puzzle extends View {
         super.onDraw(canvas);
 
         final Tile[][] tileArray = mTileArray;
+        final int tilePadding = mTilePadding;
 
         if (mBackgroundColor != Color.TRANSPARENT) {
             canvas.drawColor(mBackgroundColor);
         }
 
+        final int workingAreaMinX = mWorkingAreaMinX;
+        final int workingAreaMinY = mWorkingAreaMinY;
+        final int workingAreaSize = mWorkingAreaSize;
+        canvas.drawRect(new Rect(workingAreaMinX, workingAreaMinY, workingAreaMinX + workingAreaSize, workingAreaMinY + workingAreaSize),
+                mEmptyTilePaint);
+
+        canvas.translate(tilePadding, tilePadding);
         for (int i = 0; i < NB_COLS; i++) {
             for (int j = 0; j < NB_ROWS; j++) {
                 final Tile tile = tileArray[i][j];
-                if (tile == null) {
-                    continue;
-                }
                 canvas.save();
-                tile.drawable.setBounds(tile.anchorX, tile.anchorY, tile.anchorX + mTileWidth, tile.anchorY + mTileWidth);
-                tile.drawable.draw(canvas);
+                if (tile.drawable != null) {
+                    tile.drawable.setBounds(tile.anchorX + tilePadding, tile.anchorY + tilePadding, tile.anchorX + mTileWidth - tilePadding,
+                            tile.anchorY + mTileWidth - tilePadding);
+                    tile.drawable.draw(canvas);
+                }
                 canvas.restore();
             }
         }
+        canvas.restore();
     }
 
     private void computeMovability() {
         for (int i = 0; i < NB_COLS; i++) {
             for (int j = 0; j < NB_ROWS; j++) {
                 Tile tile = mTileArray[i][j];
-                if (tile == null) {
-                    continue;
+                if (tile.id == ID_EMPTY_TILE) {
+                    tile.canMoveLeft = false;
+                    tile.canMoveRight = false;
+                    tile.canMoveUp = false;
+                    tile.canMoveDown = false;
+                } else {
+                    tile.canMoveLeft = canMoveFromPositionToDirection(i, j, DIRECTION_LEFT);
+                    tile.canMoveRight = canMoveFromPositionToDirection(i, j, DIRECTION_RIGHT);
+                    tile.canMoveUp = canMoveFromPositionToDirection(i, j, DIRECTION_UP);
+                    tile.canMoveDown = canMoveFromPositionToDirection(i, j, DIRECTION_DOWN);
                 }
-                tile.canMoveLeft = canMoveFromPositionToDirection(i, j, DIRECTION_LEFT);
-                tile.canMoveRight = canMoveFromPositionToDirection(i, j, DIRECTION_RIGHT);
-                tile.canMoveUp = canMoveFromPositionToDirection(i, j, DIRECTION_UP);
-                tile.canMoveDown = canMoveFromPositionToDirection(i, j, DIRECTION_DOWN);
             }
         }
     }
 
-    private boolean canMoveFromPositionToDirection(final int i, final int j, final int direction) {
-        int x = i;
-        int y = j;
-
+    private boolean canMoveFromPositionToDirection(int i, int j, final int direction) {
         switch (direction) {
             case DIRECTION_LEFT:
-                if (--x < 0) {
+                if (--i < 0) {
                     return false;
                 }
                 break;
             case DIRECTION_RIGHT:
-                if (++x >= NB_COLS) {
+                if (++i >= NB_COLS) {
                     return false;
                 }
                 break;
             case DIRECTION_UP:
-                if (--y < 0) {
+                if (--j < 0) {
                     return false;
                 }
                 break;
             case DIRECTION_DOWN:
-                if (++y >= NB_ROWS) {
+                if (++j >= NB_ROWS) {
                     return false;
                 }
                 break;
         }
 
-        if (mTileArray[x][y] == null) {
+        if (mTileArray[i][j].isEmptyTile) {
             return true;
         }
 
-        return canMoveFromPositionToDirection(x, y, direction);
+        return canMoveFromPositionToDirection(i, j, direction);
+    }
+
+    @Override
+    public boolean onTouchEvent(final MotionEvent event) {
+
+        if (mIsScrolling) {
+            return true;
+        }
+
+        final int pointerIndex = event.getActionIndex();
+        final int id = event.getPointerId(pointerIndex);
+        if (mStartingPointerId == INVALID_ID) {
+            mStartingPointerId = id;
+        } else if (mStartingPointerId != id) {
+            // Not the first touch event on the screen so we do nothing with it
+            return true;
+        }
+
+        final int action = event.getActionMasked();
+        final int x = (int) event.getX(id);
+        final int y = (int) event.getY(id);
+
+        if (mVelocityTracker == null) {
+            mVelocityTracker = VelocityTracker.obtain();
+        }
+        mVelocityTracker.addMovement(event);
+
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_POINTER_DOWN:
+
+                // Removes callbacks to the Runnables handling scrolling and
+                // flinging and sets the new center, ...
+                stopAnimations();
+
+                // Sets the computing variables
+                mStartingX = x;
+                mStartingY = y;
+                mIsATap = true;
+                computeStartingPosition();
+
+                invalidate();
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (mStartingTile == null) {
+                    break;
+                }
+                // A tap is considered as a tap if the user hasn't moved its
+                // finger over a certain threshold (found in ViewConfiguration)
+                if (mIsATap) {
+                    double p1 = Math.pow(mStartingX - x, 2);
+                    double p2 = Math.pow(mStartingY - y, 2);
+                    if (Math.sqrt(p1 + p2) > mViewConfiguration.getScaledTouchSlop()) {
+                        mIsATap = false;
+                    }
+                }
+
+                computeTilesNewPosition(x, y);
+
+                invalidate();
+                break;
+            case MotionEvent.ACTION_CANCEL:
+            case MotionEvent.ACTION_UP:
+
+                if (mStartingTile == null) {
+                    break;
+                }
+                if (mIsATap) {
+                    // The user made a tap, we just have to scroll the taped
+                    // item above the focus bar.
+                    handleTap();
+                    break;
+                }
+
+                // Let's look for a fling gesture
+                final VelocityTracker velocityTracker = mVelocityTracker;
+                velocityTracker.computeCurrentVelocity(VELOCITY_UNITS, mMaxFlingVelocity);
+
+                if (mMovementDirection == DIRECTION_LEFT || mMovementDirection == DIRECTION_RIGHT) {
+                    if (Math.abs(mStartingX - x) > mTileSlop) {
+                        mFinishCurrentMovement = true;
+                    } else if (Math.abs((int) mVelocityTracker.getXVelocity(id)) > mMinFlingVelocity) {
+                        mFinishCurrentMovement = true;
+                    }
+                } else if (mMovementDirection == DIRECTION_UP || mMovementDirection == DIRECTION_DOWN) {
+                    if (Math.abs(mStartingY - y) > mTileSlop) {
+                        mFinishCurrentMovement = true;
+                    } else if (Math.abs((int) mVelocityTracker.getYVelocity(id)) > mMinFlingVelocity) {
+                        mFinishCurrentMovement = true;
+                    }
+                }
+
+                scrollAfterMovement();
+
+                if (mVelocityTracker != null) {
+                    mVelocityTracker.recycle();
+                    mVelocityTracker = null;
+                }
+
+                break;
+
+        }
+
+        return true;
+    }
+
+    private void stopAnimations() {
+        removeCallbacks(mScrollerRunnable);
+        mScroller.forceFinished(true);
+
+        mStartingTile = null;
+        mOtherMovingTileList.clear();
+        mMovementDirection = INVALID_STATE;
+        mHasMovementStarted = false;
+    }
+
+    private void computeStartingPosition() {
+        final int startingX = mStartingX;
+        final int startingY = mStartingY;
+
+        final int startingColumn = (int) Math.floor((startingX - mWorkingAreaMinX) / (float) mTileWidth);
+        final int startingRow = (int) Math.floor((startingY - mWorkingAreaMinY) / (float) mTileWidth);
+
+        if (startingColumn < 0 || startingColumn >= NB_COLS || startingRow < 0 || startingRow >= NB_ROWS) {
+            mStartingTile = null;
+        } else {
+            mStartingTile = mTileArray[startingColumn][startingRow];
+        }
+    }
+
+    private void computeTilesNewPosition(final int x, final int y) {
+
+        final Tile startingTile = mStartingTile;
+        final ArrayList<Tile> otherMovingTileList = mOtherMovingTileList;
+        final int moveX = mStartingX - x;
+        final int moveY = mStartingY - y;
+
+        if (!mHasMovementStarted) {
+            // We are not already in a movement
+            // Check if the movement is doing something (ie if the tile can move in the current direction)
+            if (startingTile.canMoveLeft && moveX > 0) {
+                mMovementDirection = DIRECTION_LEFT;
+                mHasMovementStarted = true;
+                computeOtherMovingTiles();
+            } else if (startingTile.canMoveRight && moveX < 0) {
+                mMovementDirection = DIRECTION_RIGHT;
+                mHasMovementStarted = true;
+                computeOtherMovingTiles();
+            } else if (startingTile.canMoveUp && moveY > 0) {
+                mMovementDirection = DIRECTION_UP;
+                mHasMovementStarted = true;
+                computeOtherMovingTiles();
+            } else if (startingTile.canMoveDown && moveY < 0) {
+                mMovementDirection = DIRECTION_DOWN;
+                mHasMovementStarted = true;
+                computeOtherMovingTiles();
+            }
+        }
+
+        if (mMovementDirection == DIRECTION_LEFT || mMovementDirection == DIRECTION_RIGHT) {
+            if (Math.abs(moveX) > mTileWidth || (moveX < 0 && mMovementDirection == DIRECTION_LEFT)
+                    || (moveX > 0 && mMovementDirection == DIRECTION_RIGHT)) {
+                // Overshooting
+                return;
+            }
+            mStartingTile.anchorX = mStartingTile.startAnchorX - moveX;
+            if (otherMovingTileList.size() > 0) {
+                for (Tile tile : otherMovingTileList) {
+                    tile.anchorX = tile.startAnchorX - moveX;
+                }
+            }
+        } else if (mMovementDirection == DIRECTION_UP || mMovementDirection == DIRECTION_DOWN) {
+            if (Math.abs(moveY) > mTileWidth || (moveY < 0 && mMovementDirection == DIRECTION_UP)
+                    || (moveY > 0 && mMovementDirection == DIRECTION_DOWN)) {
+                // Overshooting
+                return;
+            }
+            mStartingTile.anchorY = mStartingTile.startAnchorY - moveY;
+            if (otherMovingTileList.size() > 0) {
+                for (Tile tile : otherMovingTileList) {
+                    tile.anchorY = tile.startAnchorY - moveY;
+                }
+            }
+        }
+    }
+
+    private void computeOtherMovingTiles() {
+        final Tile startingTile = mStartingTile;
+        final ArrayList<Tile> otherMovingTileList = mOtherMovingTileList;
+        otherMovingTileList.clear();
+        final Tile[][] tileArray = mTileArray;
+
+        switch (mMovementDirection) {
+            case DIRECTION_LEFT:
+                for (int i = startingTile.column - 1; i > 0; i--) {
+                    final Tile tile = tileArray[i][startingTile.row];
+                    if (tile.isEmptyTile) {
+                        break;
+                    } else {
+                        otherMovingTileList.add(tile);
+                    }
+                }
+                break;
+            case DIRECTION_RIGHT:
+                for (int i = startingTile.column + 1; i < NB_COLS; i++) {
+                    final Tile tile = tileArray[i][startingTile.row];
+                    if (tile.isEmptyTile) {
+                        break;
+                    } else {
+                        otherMovingTileList.add(tile);
+                    }
+                }
+                break;
+            case DIRECTION_UP:
+                for (int j = startingTile.row - 1; j > 0; j--) {
+                    final Tile tile = tileArray[startingTile.column][j];
+                    if (tile.isEmptyTile) {
+                        break;
+                    } else {
+                        otherMovingTileList.add(tile);
+                    }
+                }
+                break;
+            case DIRECTION_DOWN:
+                for (int j = startingTile.row + 1; j < NB_ROWS; j++) {
+                    final Tile tile = tileArray[startingTile.column][j];
+                    if (tile.isEmptyTile) {
+                        break;
+                    } else {
+                        otherMovingTileList.add(tile);
+                    }
+                }
+                break;
+        }
+    }
+
+    /**
+     * @param finishCurrentMovement if finishCurrentMovement is true, we move the moving tiles to the direction given by mMovementDirection.
+     *            otherwise, we reset the moving tiles to their origin position
+     * @param x The current x position
+     * @param y The current y position
+     */
+    private void scrollAfterMovement() {
+
+        final boolean finishCurrentMovement = mFinishCurrentMovement;
+        int dx = 0, dy = 0;
+        switch (mMovementDirection) {
+            case DIRECTION_LEFT:
+                dx = finishCurrentMovement ? (mStartingTile.startAnchorX - mStartingTile.anchorX) - mTileWidth : mStartingTile.startAnchorX
+                        - mStartingTile.anchorX;
+                dy = 0;
+                break;
+            case DIRECTION_RIGHT:
+                dx = finishCurrentMovement ? (mStartingTile.startAnchorX - mStartingTile.anchorX) + mTileWidth : mStartingTile.startAnchorX
+                        - mStartingTile.anchorX;
+                dy = 0;
+                break;
+            case DIRECTION_UP:
+                dx = 0;
+                dy = finishCurrentMovement ? (mStartingTile.startAnchorY - mStartingTile.anchorY) - mTileWidth : mStartingTile.startAnchorY
+                        - mStartingTile.anchorY;
+                break;
+            case DIRECTION_DOWN:
+                dx = 0;
+                dy = finishCurrentMovement ? (mStartingTile.startAnchorY - mStartingTile.anchorY) + mTileWidth : mStartingTile.startAnchorY
+                        - mStartingTile.anchorY;
+                break;
+        }
+
+        if (dx == 0 && dy == 0) {
+            computeTilesNewCoordinates();
+            computeTilesStartPosition();
+            computeMovability();
+            return;
+        }
+
+        mIsScrolling = true;
+        mScroller.startScroll(mStartingTile.anchorX, mStartingTile.anchorY, dx, dy);
+        post(mScrollerRunnable);
+    }
+
+    private void computeTilesNewCoordinates() {
+        if (!mFinishCurrentMovement) {
+            return;
+        }
+
+        final Tile startingTile = mStartingTile;
+        final ArrayList<Tile> otherMovingTileList = mOtherMovingTileList;
+
+        int dcolumn = 0;
+        int drow = 0;
+        switch (mMovementDirection) {
+            case DIRECTION_LEFT:
+                dcolumn = -1;
+                break;
+            case DIRECTION_RIGHT:
+                dcolumn = 1;
+                break;
+            case DIRECTION_UP:
+                drow = -1;
+                break;
+            case DIRECTION_DOWN:
+                drow = 1;
+                break;
+        }
+
+        startingTile.newColumn = startingTile.column + dcolumn;
+        startingTile.newRow = startingTile.row + drow;
+
+        if (otherMovingTileList.size() > 0) {
+            for (Tile tile : otherMovingTileList) {
+                tile.newColumn = tile.column + dcolumn;
+                tile.newRow = tile.row + drow;
+            }
+        }
+
+        swapTiles(startingTile);
+
+        if (otherMovingTileList.size() > 0) {
+            for (Tile tile : otherMovingTileList) {
+                swapTiles(tile);
+            }
+        }
+    }
+
+    private void swapTiles(final Tile tile1) {
+        final Tile tile2 = mTileArray[tile1.newColumn][tile1.newRow];
+        swapTiles(tile1, tile2);
+    }
+
+    private void swapTiles(final Tile tile1, final Tile tile2) {
+        final Tile[][] tileArray = mTileArray;
+
+        int save;
+        save = tile1.column;
+        tile1.column = tile2.column;
+        tile2.column = save;
+
+        save = tile1.row;
+        tile1.row = tile2.row;
+        tile2.row = save;
+
+        tileArray[tile2.column][tile2.row] = tile2;
+        tileArray[tile1.column][tile1.row] = tile1;
+    }
+
+    private void handleTap() {
+        final Tile startingTile = mStartingTile;
+
+        boolean tapMovement = false;
+        if (startingTile.canMoveLeft) {
+            mMovementDirection = DIRECTION_LEFT;
+            tapMovement = true;
+            computeOtherMovingTiles();
+        } else if (startingTile.canMoveRight) {
+            mMovementDirection = DIRECTION_RIGHT;
+            tapMovement = true;
+            computeOtherMovingTiles();
+        } else if (startingTile.canMoveUp) {
+            mMovementDirection = DIRECTION_UP;
+            tapMovement = true;
+            computeOtherMovingTiles();
+        } else if (startingTile.canMoveDown) {
+            mMovementDirection = DIRECTION_DOWN;
+            tapMovement = true;
+            computeOtherMovingTiles();
+        }
+
+        if (tapMovement) {
+            computeOtherMovingTiles();
+            mFinishCurrentMovement = true;
+            scrollAfterMovement();
+        }
     }
 
     private class Tile {
         public int id;
         public Drawable drawable = null;
+        public boolean isEmptyTile;
 
-        public int anchorX = INVALID_POS;
-        public int anchorY = INVALID_POS;
-        public int row = INVALID_POS;
-        public int column = INVALID_POS;
+        public int anchorX = INVALID_STATE;
+        public int anchorY = INVALID_STATE;
+        public int startAnchorX = INVALID_STATE;
+        public int startAnchorY = INVALID_STATE;
+
+        public int row = INVALID_STATE;
+        public int column = INVALID_STATE;
+        public int newRow = INVALID_STATE;
+        public int newColumn = INVALID_STATE;
 
         public boolean canMoveLeft = false;
         public boolean canMoveRight = false;
         public boolean canMoveUp = false;
         public boolean canMoveDown = false;
 
-        public Tile(final int id) {
+        public Tile(final int id, final boolean isEmptyTile) {
             this.id = id;
+            this.isEmptyTile = isEmptyTile;
         }
     }
 }
