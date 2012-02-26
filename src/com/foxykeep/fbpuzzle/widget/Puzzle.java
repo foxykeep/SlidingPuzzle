@@ -245,17 +245,16 @@ public class Puzzle extends View {
 
         do {
             for (int i = 0; i < drawableListSize && i < NB_PUZZLE_DRAWABLES; i++) {
+                if (nbDrawableSet == ID_EMPTY_TILE) {
+                    mDrawableArray[nbDrawableSet] = null;
+                    nbDrawableSet++;
+                }
                 if (mDrawableArray == null) {
                     mDrawableArray = new Drawable[16];
                 }
                 mDrawableArray[nbDrawableSet++] = drawableList.get(i);
-                if (nbDrawableSet == ID_EMPTY_TILE) {
-                    nbDrawableSet++;
-                }
             }
         } while (nbDrawableSet < NB_PUZZLE_DRAWABLES);
-        // Empty tile for the hole in the puzzle
-        mDrawableArray[ID_EMPTY_TILE] = null;
 
         for (int i = 0, j = 0; i < NB_PUZZLE_TILES; i++) {
             Tile tile = mTileSparseArray.get(i);
