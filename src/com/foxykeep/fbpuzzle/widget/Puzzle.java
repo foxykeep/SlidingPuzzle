@@ -110,6 +110,7 @@ public class Puzzle extends View {
 
     private boolean mNoInvalidate;
 
+    private boolean mHasPuzzleChanged = false;
     private OnPuzzleCompletedListener mOnPuzzleCompletedListener;
 
     /**
@@ -323,6 +324,8 @@ public class Puzzle extends View {
             mTileArray[tile.column][tile.row] = tile;
         }
 
+        mHasPuzzleChanged = false;
+
         computeMovability();
         computeTilesStartPosition();
 
@@ -333,6 +336,8 @@ public class Puzzle extends View {
         do {
             scramble();
         } while (!checkIfSolvable());
+
+        mHasPuzzleChanged = false;
 
         computeMovability();
         computeTilesStartPosition();
@@ -367,6 +372,8 @@ public class Puzzle extends View {
             tile.row = index / 4;
             mTileArray[tile.column][tile.row] = tile;
         }
+
+        mHasPuzzleChanged = false;
 
         computeMovability();
         computeTilesStartPosition();
@@ -930,7 +937,7 @@ public class Puzzle extends View {
     }
 
     private void computePuzzleCompleted() {
-        if (mOnPuzzleCompletedListener != null) {
+        if (mHasPuzzleChanged && mOnPuzzleCompletedListener != null) {
             for (int i = 0; i < NB_PUZZLE_TILES; i++) {
                 final Tile tile = mTileSparseArray.get(i);
                 if (tile.column + tile.row * 4 != tile.id) {
@@ -947,6 +954,9 @@ public class Puzzle extends View {
     private void swapTiles(final Tile tile1) {
         final Tile tile2 = mTileArray[tile1.newColumn][tile1.newRow];
         swapTiles(tile1, tile2);
+
+        // If this method is called, then the puzzle changed due to an user interaction and a tile was swaped
+        mHasPuzzleChanged = true;
     }
 
     private void swapTiles(final Tile tile1, final Tile tile2) {
