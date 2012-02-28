@@ -25,6 +25,18 @@ import com.foxykeep.fbpuzzle.config.LogConfig;
 
 public class Puzzle extends View {
 
+    /**
+     * This listener is called when the puzzle is completed. It's not triggered by the resetPuzzle method
+     * 
+     * @author Foxykeep
+     */
+    public interface OnPuzzleCompletedListener {
+        /**
+         * Called when the puzzle is completed
+         */
+        public void onPuzzleCompleted();
+    }
+
     private static final String LOG_TAG = Puzzle.class.getSimpleName();
 
     private static final int NB_PUZZLE_TILES = 16;
@@ -90,6 +102,8 @@ public class Puzzle extends View {
 
     private boolean mNoInvalidate;
 
+    private OnPuzzleCompletedListener mOnPuzzleCompletedListener;
+
     /**
      * Indicates whether or not onSizeChanged has been done.
      */
@@ -122,6 +136,7 @@ public class Puzzle extends View {
                 computeTilesNewCoordinates();
                 computeTilesStartPosition();
                 computeMovability();
+                computePuzzleCompleted();
 
                 stopAnimations();
             }
@@ -232,6 +247,24 @@ public class Puzzle extends View {
      */
     public int getEmptyTileColor() {
         return mEmptyTileColor;
+    }
+
+    /**
+     * Set an OnPuzzleCompletedListener
+     * 
+     * @param listener an OnPuzzleCompletedListener
+     */
+    public void setOnPuzzleCompletedListener(final OnPuzzleCompletedListener listener) {
+        mOnPuzzleCompletedListener = listener;
+    }
+
+    /**
+     * Get the OnPuzzleCompletedListener associated to this puzzle if any
+     * 
+     * @return the OnPuzzleCompletedListener associated to this puzzle or null otherwise
+     */
+    public OnPuzzleCompletedListener getOnPuzzleCompletedListener() {
+        return mOnPuzzleCompletedListener;
     }
 
     /**
@@ -835,6 +868,7 @@ public class Puzzle extends View {
             computeTilesNewCoordinates();
             computeTilesStartPosition();
             computeMovability();
+            computePuzzleCompleted();
             return;
         }
 
@@ -884,6 +918,21 @@ public class Puzzle extends View {
             for (Tile tile : otherMovingTileList) {
                 swapTiles(tile);
             }
+        }
+    }
+
+    private void computePuzzleCompleted() {
+        if (mOnPuzzleCompletedListener != null) {
+            for (int i = 0; i < NB_PUZZLE_TILES; i++) {
+                final Tile tile = mTileSparseArray.get(i);
+                if (tile.column + tile.row * 4 != tile.id) {
+                    // The tile is not in its right position
+                    return;
+                }
+            }
+
+            // Every tiles are in their right position
+            mOnPuzzleCompletedListener.onPuzzleCompleted();
         }
     }
 
