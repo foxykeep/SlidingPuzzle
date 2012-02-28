@@ -1,3 +1,11 @@
+/*
+ * 2012 Foxykeep (http://foxykeep.com)
+ *
+ * Licensed under the Beerware License :
+ * 
+ *   As long as you retain this notice you can do whatever you want with this stuff. If we meet some day, and you think
+ *   this stuff is worth it, you can buy me a beer in return
+ */
 package com.foxykeep.fbpuzzle.config;
 
 @SuppressWarnings("unused")
@@ -17,7 +25,7 @@ public class LogConfig {
     /**
      * Set this flag to {@link LogConfig#FBP_LOG_LEVEL_NONE} when releasing your application in order to remove all logs generated.
      */
-    private static final int FBP_LOG_LEVEL = FBP_LOG_LEVEL_DEBUG;
+    private static final int FBP_LOG_LEVEL = FBP_LOG_LEVEL_ERROR;
 
     public static final boolean FBP_DEBUG_LOGS_ENABLED = (FBP_LOG_LEVEL_DEBUG == FBP_LOG_LEVEL);
     public static final boolean FBP_WARNING_LOGS_ENABLED = FBP_DEBUG_LOGS_ENABLED || (FBP_LOG_LEVEL == FBP_LOG_LEVEL_WARNING);

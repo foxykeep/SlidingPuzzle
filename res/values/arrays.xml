@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+2012 Foxykeep (http://foxykeep.com)
+Licensed under the Beerware License : 
+As long as you retain this notice you can do whatever you want 
+with this stuff. If we meet some day, and you think this stuff is worth it, 
+you can buy me a beer in return
+-->
 <resources>
 
     <string-array name="home_images">

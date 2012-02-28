@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+2012 Foxykeep (http://foxykeep.com)
+Licensed under the Beerware License : 
+As long as you retain this notice you can do whatever you want 
+with this stuff. If we meet some day, and you think this stuff is worth it, 
+you can buy me a beer in return
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -30,7 +37,9 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:entries="@array/home_images" /><CheckBox
+        android:entries="@array/home_images" />
+
+    <CheckBox
         android:id="@+id/cb_win"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
