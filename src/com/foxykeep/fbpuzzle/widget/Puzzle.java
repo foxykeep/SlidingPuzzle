@@ -997,7 +997,6 @@ public class Puzzle extends View {
         for (int i = 0; i < NB_PUZZLE_TILES; i++) {
             final Tile tile = mTileSparseArray.get(i);
             ss.tileOrder[tile.id] = tile.row * 4 + tile.column;
-            Log.d("fox", "tile col,row " + tile.row + " " + tile.column + " | index " + (tile.row * 4 + tile.column) + " | id " + tile.id);
         }
 
         return ss;
