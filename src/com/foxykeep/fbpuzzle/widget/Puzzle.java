@@ -9,6 +9,8 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.SparseArray;
@@ -250,7 +252,7 @@ public class Puzzle extends View {
                     nbDrawableSet++;
                 }
                 if (mDrawableArray == null) {
-                    mDrawableArray = new Drawable[16];
+                    mDrawableArray = new Drawable[NB_PUZZLE_TILES];
                 }
                 mDrawableArray[nbDrawableSet++] = drawableList.get(i);
             }
@@ -308,6 +310,24 @@ public class Puzzle extends View {
 
             nbScrambles++;
         }
+    }
+
+    private void setTileOrder(final int[] tileOrder) {
+        if (tileOrder.length != NB_PUZZLE_TILES) {
+            return;
+        }
+        for (int i = 0; i < NB_PUZZLE_TILES; i++) {
+            final int index = tileOrder[i];
+            final Tile tile = mTileSparseArray.get(i);
+            tile.column = index % 4;
+            tile.row = index / 4;
+            mTileArray[tile.column][tile.row] = tile;
+        }
+
+        computeMovability();
+        computeTilesStartPosition();
+
+        invalidate();
     }
 
     private boolean checkIfSolvable() {
@@ -934,5 +954,60 @@ public class Puzzle extends View {
             this.id = id;
             this.isEmptyTile = isEmptyTile;
         }
+    }
+
+    static class SavedState extends BaseSavedState {
+        int[] tileOrder;
+
+        SavedState(final Parcelable superState) {
+            super(superState);
+        }
+
+        private SavedState(final Parcel in) {
+            super(in);
+            tileOrder = new int[in.readInt()];
+            in.readIntArray(tileOrder);
+        }
+
+        @Override
+        public void writeToParcel(final Parcel out, final int flags) {
+            super.writeToParcel(out, flags);
+            out.writeInt(tileOrder.length);
+            out.writeIntArray(tileOrder);
+        }
+
+        public static final Parcelable.Creator<SavedState> CREATOR = new Parcelable.Creator<SavedState>() {
+            public SavedState createFromParcel(final Parcel in) {
+                return new SavedState(in);
+            }
+
+            public SavedState[] newArray(final int size) {
+                return new SavedState[size];
+            }
+        };
+    }
+
+    @Override
+    public Parcelable onSaveInstanceState() {
+        Parcelable superState = super.onSaveInstanceState();
+        SavedState ss = new SavedState(superState);
+
+        ss.tileOrder = new int[NB_PUZZLE_TILES];
+
+        for (int i = 0; i < NB_PUZZLE_TILES; i++) {
+            final Tile tile = mTileSparseArray.get(i);
+            ss.tileOrder[tile.id] = tile.row * 4 + tile.column;
+            Log.d("fox", "tile col,row " + tile.row + " " + tile.column + " | index " + (tile.row * 4 + tile.column) + " | id " + tile.id);
+        }
+
+        return ss;
+    }
+
+    @Override
+    public void onRestoreInstanceState(final Parcelable state) {
+        SavedState ss = (SavedState) state;
+        super.onRestoreInstanceState(ss.getSuperState());
+
+        setTileOrder(ss.tileOrder);
     }
 }
