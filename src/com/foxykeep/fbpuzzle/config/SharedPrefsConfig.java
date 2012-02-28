@@ -8,8 +8,12 @@
  */
 package com.foxykeep.fbpuzzle.config;
 
-public class Config {
+public class SharedPrefsConfig {
 
-    private Config() {
+    private SharedPrefsConfig() {
     }
+
+    public static final String SHARED_PREFS_FILENAME = "com.foxykeep.fbpuzzle";
+
+    public static final String SP_DISPLAYS_WIN_MESSAGE = "winMessage";
 }

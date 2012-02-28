@@ -11,6 +11,7 @@ package com.foxykeep.fbpuzzle;
 import java.util.ArrayList;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.util.SparseArray;
@@ -23,12 +24,11 @@ import android.widget.CheckBox;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import com.foxykeep.fbpuzzle.config.SharedPrefsConfig;
 import com.foxykeep.fbpuzzle.widget.Puzzle;
 import com.foxykeep.fbpuzzle.widget.Puzzle.OnPuzzleCompletedListener;
 
 public class HomeActivity extends Activity implements OnClickListener, OnPuzzleCompletedListener {
-
-    private static final String SAVED_STATE_DISPLAY_WIN_MESSAGE = "savedStateWinMessage";
 
     private static final int[][] PUZZLE_IMAGES = new int[4][15];
     static {
@@ -100,20 +100,11 @@ public class HomeActivity extends Activity implements OnClickListener, OnPuzzleC
 
     private void populateViews() {
         loadDrawable(0);
-    }
 
-    @Override
-    protected void onSaveInstanceState(final Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putBoolean(SAVED_STATE_DISPLAY_WIN_MESSAGE, mCheckBoxWinMessage.isChecked());
-    }
-
-    @Override
-    protected void onRestoreInstanceState(final Bundle savedInstanceState) {
-        super.onRestoreInstanceState(savedInstanceState);
-        final boolean displayWinMessage = savedInstanceState.getBoolean(SAVED_STATE_DISPLAY_WIN_MESSAGE, false);
-        mCheckBoxWinMessage.setChecked(displayWinMessage);
-        mPuzzle.setOnPuzzleCompletedListener(displayWinMessage ? this : null);
+        final SharedPreferences sharedPrefs = getSharedPreferences(SharedPrefsConfig.SHARED_PREFS_FILENAME, MODE_PRIVATE);
+        final boolean displaysWinMessage = sharedPrefs.getBoolean(SharedPrefsConfig.SP_DISPLAYS_WIN_MESSAGE, false);
+        mCheckBoxWinMessage.setChecked(displaysWinMessage);
+        mPuzzle.setOnPuzzleCompletedListener(displaysWinMessage ? this : null);
     }
 
     private void loadDrawable(final int imageSet) {
@@ -140,6 +131,8 @@ public class HomeActivity extends Activity implements OnClickListener, OnPuzzleC
         } else if (v == mButtonScramble) {
             mPuzzle.scramblePuzzle();
         } else if (v == mCheckBoxWinMessage) {
+            getSharedPreferences(SharedPrefsConfig.SHARED_PREFS_FILENAME, MODE_PRIVATE).edit()
+                    .putBoolean(SharedPrefsConfig.SP_DISPLAYS_WIN_MESSAGE, mCheckBoxWinMessage.isChecked()).commit();
             mPuzzle.setOnPuzzleCompletedListener(mCheckBoxWinMessage.isChecked() ? this : null);
         }
     }
