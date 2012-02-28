@@ -17,7 +17,7 @@ import com.foxykeep.fbpuzzle.widget.Puzzle;
 
 public class HomeActivity extends Activity implements OnClickListener {
 
-    private static final int[][] PUZZLE_IMAGES = new int[3][15];
+    private static final int[][] PUZZLE_IMAGES = new int[4][15];
     static {
         PUZZLE_IMAGES[0] = new int[] {
                 R.drawable.globe_0, R.drawable.globe_1, R.drawable.globe_2, R.drawable.globe_3, R.drawable.globe_4, R.drawable.globe_5,
@@ -33,6 +33,11 @@ public class HomeActivity extends Activity implements OnClickListener {
                 R.drawable.golden_gate_0, R.drawable.golden_gate_1, R.drawable.golden_gate_2, R.drawable.golden_gate_3, R.drawable.golden_gate_4,
                 R.drawable.golden_gate_5, R.drawable.golden_gate_6, R.drawable.golden_gate_7, R.drawable.golden_gate_8, R.drawable.golden_gate_9,
                 R.drawable.golden_gate_10, R.drawable.golden_gate_11, R.drawable.golden_gate_12, R.drawable.golden_gate_13, R.drawable.golden_gate_14
+        };
+        PUZZLE_IMAGES[3] = new int[] {
+                R.drawable.android_0, R.drawable.android_1, R.drawable.android_2, R.drawable.android_3, R.drawable.android_4, R.drawable.android_5,
+                R.drawable.android_6, R.drawable.android_7, R.drawable.android_8, R.drawable.android_9, R.drawable.android_10, R.drawable.android_11,
+                R.drawable.android_12, R.drawable.android_13, R.drawable.android_14
         };
     }
 
