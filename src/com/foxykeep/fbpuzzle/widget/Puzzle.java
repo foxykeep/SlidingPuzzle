@@ -242,6 +242,9 @@ public class Puzzle extends View {
      * @param drawableList an ArrayList of {@link Drawable}s for the puzzle
      */
     public void setDrawableList(final ArrayList<Drawable> drawableList) {
+        if (drawableList == null || drawableList.isEmpty()) {
+            return;
+        }
         final int drawableListSize = drawableList.size();
         int nbDrawableSet = 0;
 
@@ -378,16 +381,20 @@ public class Puzzle extends View {
         int heightSize = MeasureSpec.getSize(heightMeasureSpec);
         final int heightMode = MeasureSpec.getMode(heightMeasureSpec);
 
+        int h = 0, w = 0;
         // Check that values are not undefined
         if (widthMode == MeasureSpec.UNSPECIFIED && heightMode == MeasureSpec.UNSPECIFIED) {
-            throw new IllegalArgumentException("Puzzle cannot have both UNSPECIFIED dimensions");
+            if (mDrawableArray != null && mDrawableArray.length > 0) {
+                h = w = Math.max(mDrawableArray[0].getIntrinsicHeight(), mDrawableArray[0].getIntrinsicWidth()) * 4;
+            }
+        } else if (widthMode == MeasureSpec.UNSPECIFIED) {
+            h = w = heightSize;
+        } else if (heightMode == MeasureSpec.UNSPECIFIED) {
+            h = w = widthSize;
         }
 
-        if (widthMode == MeasureSpec.UNSPECIFIED) {
-            widthSize = resolveSize(heightSize, widthMeasureSpec);
-        } else if (heightMode == MeasureSpec.UNSPECIFIED) {
-            heightSize = resolveSize(widthSize, heightMeasureSpec);
-        }
+        widthSize = resolveSize(h, widthMeasureSpec);
+        heightSize = resolveSize(w, heightMeasureSpec);
 
         setMeasuredDimension(widthSize, heightSize);
 
