@@ -11,11 +11,16 @@ import android.view.View.OnClickListener;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.Spinner;
+import android.widget.Toast;
 
 import com.foxykeep.fbpuzzle.widget.Puzzle;
+import com.foxykeep.fbpuzzle.widget.Puzzle.OnPuzzleCompletedListener;
 
-public class HomeActivity extends Activity implements OnClickListener {
+public class HomeActivity extends Activity implements OnClickListener, OnPuzzleCompletedListener {
+
+    private static final String SAVED_STATE_DISPLAY_WIN_MESSAGE = "savedStateWinMessage";
 
     private static final int[][] PUZZLE_IMAGES = new int[4][15];
     static {
@@ -44,6 +49,7 @@ public class HomeActivity extends Activity implements OnClickListener {
     private Button mButtonReset;
     private Button mButtonScramble;
     private Spinner mSpinnerImages;
+    private CheckBox mCheckBoxWinMessage;
     private Puzzle mPuzzle;
 
     private SparseArray<ArrayList<Drawable>> mSparseArrayDrawableList = new SparseArray<ArrayList<Drawable>>();;
@@ -55,7 +61,7 @@ public class HomeActivity extends Activity implements OnClickListener {
 
         bindViews();
 
-        loadDrawable(0);
+        populateViews();
     }
 
     private void bindViews() {
@@ -78,7 +84,28 @@ public class HomeActivity extends Activity implements OnClickListener {
             }
         });
 
+        mCheckBoxWinMessage = (CheckBox) findViewById(R.id.cb_win);
+        mCheckBoxWinMessage.setOnClickListener(this);
+
         mPuzzle = (Puzzle) findViewById(R.id.p_puzzle);
+    }
+
+    private void populateViews() {
+        loadDrawable(0);
+    }
+
+    @Override
+    protected void onSaveInstanceState(final Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(SAVED_STATE_DISPLAY_WIN_MESSAGE, mCheckBoxWinMessage.isChecked());
+    }
+
+    @Override
+    protected void onRestoreInstanceState(final Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        final boolean displayWinMessage = savedInstanceState.getBoolean(SAVED_STATE_DISPLAY_WIN_MESSAGE, false);
+        mCheckBoxWinMessage.setChecked(displayWinMessage);
+        mPuzzle.setOnPuzzleCompletedListener(displayWinMessage ? this : null);
     }
 
     private void loadDrawable(final int imageSet) {
@@ -104,6 +131,13 @@ public class HomeActivity extends Activity implements OnClickListener {
             mPuzzle.resetPuzzle();
         } else if (v == mButtonScramble) {
             mPuzzle.scramblePuzzle();
+        } else if (v == mCheckBoxWinMessage) {
+            mPuzzle.setOnPuzzleCompletedListener(mCheckBoxWinMessage.isChecked() ? this : null);
         }
+    }
+
+    @Override
+    public void onPuzzleCompleted() {
+        Toast.makeText(this, R.string.home_toast_win_message, Toast.LENGTH_LONG).show();
     }
 }

@@ -4,5 +4,7 @@
     <string name="app_name">FBPuzzle</string>
     <string name="home_b_reset">Reset</string>
     <string name="home_b_scramble">Scramble</string>
+    <string name="home_cb_win_message">Win message ?</string>
+    <string name="home_toast_win_message">You have completed the puzzle !</string>
 
 </resources>
